@@ -12,6 +12,15 @@ Schema::
     [permissions]
     allow_commands = ["git status", "git diff", "ls"]
     auto_approve_edits = false
+
+    [[subagents]]
+    name = "reviewer"
+    description = "Reviews code changes for bugs and style issues"
+    system_prompt = "You are a meticulous code reviewer..."
+    model = "anthropic:claude-haiku-4-5"   # optional; defaults to the main model
+    skills = []                            # optional skill source dirs
+
+Subagent entries from both files are merged by name, project winning.
 """
 
 from __future__ import annotations
@@ -41,11 +50,17 @@ class PermissionsConfig:
     auto_approve_edits: bool = False
 
 
+# Keys copied from a [[subagents]] entry into the SDK's SubAgent spec.
+SUBAGENT_REQUIRED_KEYS = ("name", "description", "system_prompt")
+SUBAGENT_OPTIONAL_KEYS = ("model", "skills")
+
+
 @dataclass
 class Config:
     project_dir: Path
     model: str = DEFAULT_MODEL
     permissions: PermissionsConfig = field(default_factory=PermissionsConfig)
+    subagents: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def state_dir(self) -> Path:
@@ -60,12 +75,30 @@ def _read_toml(path: Path) -> dict[str, Any]:
         return tomllib.load(f)
 
 
+def _parse_subagents(entries: Any) -> list[dict[str, Any]]:
+    subagents: list[dict[str, Any]] = []
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        missing = [k for k in SUBAGENT_REQUIRED_KEYS if not entry.get(k)]
+        if missing:
+            raise ValueError(
+                f"subagent entry {entry.get('name', '?')!r} missing required keys: {missing}"
+            )
+        spec = {k: entry[k] for k in (*SUBAGENT_REQUIRED_KEYS, *SUBAGENT_OPTIONAL_KEYS) if k in entry}
+        subagents.append(spec)
+    return subagents
+
+
 def load_config(project_dir: Path | None = None) -> Config:
     project_dir = (project_dir or Path.cwd()).resolve()
     merged: dict[str, Any] = {}
+    subagents_by_name: dict[str, dict[str, Any]] = {}
     for path in (Path.home() / ".medad" / "config.toml", project_dir / ".medad" / "config.toml"):
         data = _read_toml(path)
         perms = {**merged.get("permissions", {}), **data.get("permissions", {})}
+        for spec in _parse_subagents(data.get("subagents", [])):
+            subagents_by_name[spec["name"]] = spec
         merged.update(data)
         merged["permissions"] = perms
 
@@ -78,4 +111,5 @@ def load_config(project_dir: Path | None = None) -> Config:
         project_dir=project_dir,
         model=str(merged.get("model", DEFAULT_MODEL)),
         permissions=permissions,
+        subagents=list(subagents_by_name.values()),
     )

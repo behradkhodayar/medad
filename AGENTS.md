@@ -15,7 +15,14 @@ SDK (LangChain Deep Agents) with LangGraph as the runtime.
   `Command(resume={interrupt_id: {"decisions": [...]}})`.
 - Sessions persist via `SqliteSaver` in `.medad/sessions.db`; `--resume` reuses
   the thread id stored in `.medad/last_session`.
-- Config: `~/.medad/config.toml` merged with `<project>/.medad/config.toml`.
+- Config: `~/.medad/config.toml` merged with `<project>/.medad/config.toml`,
+  including `[[subagents]]` specs (merged by name, project wins).
+- Skills: source dirs `~/.medad/skills` + `.medad/skills` passed to the SDK's
+  `skills=`; discovery/frontmatter parsing lives in `medad/skills.py`.
+- Memory: existing `AGENTS.md` (project) and `~/.medad/AGENTS.md` (global)
+  passed to `memory=` — the SDK's MemoryMiddleware injects and maintains them.
+- `/compact` (repl.py `_compact`) asks the model for a handoff summary, then
+  seeds a fresh thread via `update_state(..., as_node="__start__")`.
 
 ## Conventions
 

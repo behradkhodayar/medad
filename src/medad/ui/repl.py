@@ -4,14 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langgraph.types import Command
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 
 from medad.commands import CommandResult, dispatch
-from medad.session import save_last_thread_id
+from medad.session import new_thread_id, save_last_thread_id
 from medad.ui import approval, render
+
+COMPACT_PROMPT = (
+    "Write a dense handoff summary of this session for a fresh assistant: the "
+    "goal, key decisions, files touched, current state, and open next steps. "
+    "Output only the summary."
+)
 
 
 class ReplContext:
@@ -81,6 +87,30 @@ def run_turn(ctx: ReplContext, payload: Any) -> None:
         payload = Command(resume=resume)
 
 
+def _compact(ctx: ReplContext) -> None:
+    """Summarize the conversation, then continue in a fresh thread seeded
+    with the summary — the manual counterpart to the SDK's auto-summarization."""
+    state = ctx.agent.get_state(ctx.graph_config)
+    messages = state.values.get("messages", []) if state and state.values else []
+    if len(messages) < 2:
+        render.print_note("nothing to compact yet")
+        return
+    run_turn(ctx, {"messages": [{"role": "user", "content": COMPACT_PROMPT}]})
+    state = ctx.agent.get_state(ctx.graph_config)
+    summary = render.message_text(state.values["messages"][-1].content)
+    if not summary.strip():
+        render.print_error("compaction failed: empty summary; staying on the current session")
+        return
+    ctx.thread_id = new_thread_id()
+    save_last_thread_id(ctx.cfg.state_dir, ctx.thread_id)
+    ctx.agent.update_state(
+        ctx.graph_config,
+        {"messages": [HumanMessage(f"[compacted context from the previous session]\n{summary}")]},
+        as_node="__start__",
+    )
+    render.print_note(f"compacted into new session {ctx.thread_id[:8]}")
+
+
 def run_repl(ctx: ReplContext) -> None:
     render.print_banner(ctx.cfg.model, str(ctx.cfg.project_dir), ctx.thread_id)
     save_last_thread_id(ctx.cfg.state_dir, ctx.thread_id)
@@ -96,9 +126,15 @@ def run_repl(ctx: ReplContext) -> None:
         if not line:
             continue
         if line.startswith("/"):
-            if dispatch(ctx, line) is CommandResult.QUIT:
+            result = dispatch(ctx, line)
+            if result is CommandResult.QUIT:
                 return
-            continue
+            if result is CommandResult.COMPACT:
+                _compact(ctx)
+                continue
+            if not isinstance(result, str):
+                continue
+            line = result  # e.g. /skill:<name> expands to a user message
         try:
             run_turn(ctx, {"messages": [{"role": "user", "content": line}]})
         except KeyboardInterrupt:
