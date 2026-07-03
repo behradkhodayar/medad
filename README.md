@@ -16,7 +16,14 @@ A Claude-Code-like terminal coding agent built on
 - Persistent sessions (SQLite checkpointer) with `--resume`
 - Todo planning (`write_todos`), subagent delegation (`task`), and automatic
   context summarization — inherited from the SDK
-- Slash commands: `/model`, `/clear`, `/todos`, `/allow`, `/help`, `/quit`
+- **Skills**: drop `<name>/SKILL.md` dirs under `~/.medad/skills/` (global) or
+  `.medad/skills/` (project); list with `/skills`, invoke with `/skill:<name> [task]`
+- **Memory**: `AGENTS.md` (project) and `~/.medad/AGENTS.md` (global) load into
+  every session; the agent updates them as it learns
+- **Custom subagents**: define named `[[subagents]]` in config; the agent
+  delegates to them via the `task` tool
+- Slash commands: `/model`, `/clear`, `/compact`, `/todos`, `/skills`,
+  `/skill:<name>`, `/allow`, `/help`, `/quit`
 - Headless mode for scripting/CI: `medad -n "..."` or `echo "..." | medad`
 
 ## Install & run
@@ -41,6 +48,12 @@ model = "anthropic:claude-opus-4-8"
 [permissions]
 allow_commands = ["git status", "git diff", "ls", "uv run pytest"]
 auto_approve_edits = false
+
+[[subagents]]
+name = "reviewer"
+description = "Reviews code changes for bugs and style issues"
+system_prompt = "You are a meticulous code reviewer. Report findings as a list."
+model = "anthropic:claude-haiku-4-5"   # optional; defaults to the main model
 ```
 
 Anything not on the allowlist pauses the agent and asks. Headless mode runs
@@ -54,7 +67,5 @@ uv run pytest
 
 ## Roadmap
 
-- Phase 3 — skills directory + `/skill:` invocation, `AGENTS.md` memory,
-  custom subagent definitions
 - Phase 4 — MCP servers from config, remote sandbox backends (E2B/LangSmith),
   LangSmith tracing docs
