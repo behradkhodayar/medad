@@ -28,6 +28,7 @@ uv run medad                   # interactive, in the current directory
 uv run medad -n "add a hello.py that prints hi"   # headless one-shot
 uv run medad --resume          # continue the last session
 uv run medad -m anthropic:claude-opus-4-8         # explicit model
+uv run medad -m openrouter:anthropic/claude-haiku-4.5   # via OpenRouter (OPENROUTER_API_KEY)
 ```
 
 ## Configuration
