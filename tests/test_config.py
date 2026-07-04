@@ -37,7 +37,25 @@ def test_sandbox_defaults(tmp_path: Path):
     cfg = load_config(tmp_path)
     assert cfg.sandbox.backend == "local"
     assert cfg.sandbox.name is None
+    assert cfg.sandbox.image == "python:3.12-slim"
+    assert cfg.sandbox.mount_project is True
     assert cfg.mcp_servers == {}
+
+
+def test_sandbox_docker_config(tmp_path: Path):
+    (tmp_path / ".medad").mkdir()
+    (tmp_path / ".medad" / "config.toml").write_text(
+        """
+[sandbox]
+backend = "docker"
+image = "alpine:3"
+mount_project = false
+"""
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.sandbox.backend == "docker"
+    assert cfg.sandbox.image == "alpine:3"
+    assert cfg.sandbox.mount_project is False
 
 
 def test_sandbox_and_mcp_config(tmp_path: Path):

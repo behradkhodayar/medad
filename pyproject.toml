@@ -1,6 +1,6 @@
 [project]
 name = "medad"
-version = "0.3.0"
+version = "0.4.0"
 description = "medad — a Claude-Code-like terminal coding harness built on LangChain Deep Agents"
 readme = "README.md"
 authors = [
