@@ -25,6 +25,10 @@ A Claude-Code-like terminal coding agent built on
 - Slash commands: `/model`, `/clear`, `/compact`, `/todos`, `/skills`,
   `/skill:<name>`, `/allow`, `/help`, `/quit`
 - Headless mode for scripting/CI: `medad -n "..."` or `echo "..." | medad`
+- **MCP servers**: declare `[mcp.servers.<name>]` connections in config; their
+  tools are mounted into the agent and gated by the same approval flow
+- **Remote sandboxes**: `[sandbox] backend = "langsmith"` runs shell/file tools
+  in a LangSmith sandbox VM instead of your host
 
 ## Install & run
 
@@ -56,8 +60,61 @@ system_prompt = "You are a meticulous code reviewer. Report findings as a list."
 model = "anthropic:claude-haiku-4-5"   # optional; defaults to the main model
 ```
 
-Anything not on the allowlist pauses the agent and asks. Headless mode runs
-without approval gates — use it in trusted contexts only.
+Anything not on the allowlist pauses the agent and asks. Chained or redirected
+commands (`&&`, `|`, `;`, `$(...)`, `>` …) never auto-approve on a prefix
+match — only an exact allowlist entry covers them. Headless mode runs without
+approval gates — use it in trusted contexts only (or in a remote sandbox,
+below).
+
+### MCP servers
+
+Each `[mcp.servers.<name>]` table is a
+[langchain-mcp-adapters](https://github.com/langchain-ai/langchain-mcp-adapters)
+connection, passed through verbatim. Mounted tools show up like any other tool
+and go through the approval gate in interactive mode.
+
+```toml
+[mcp.servers.github]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+
+[mcp.servers.docs]
+transport = "streamable_http"
+url = "https://example.com/mcp"
+```
+
+### Remote sandboxes
+
+By default the agent's `execute` and file tools act on your machine. Point
+them at a [LangSmith sandbox](https://docs.langchain.com/langsmith/sandboxes)
+VM instead — this is what makes headless mode safe:
+
+```toml
+[sandbox]
+backend = "langsmith"   # default: "local"
+name = "my-sandbox"     # optional; a named sandbox is reused across runs
+```
+
+Requires `LANGSMITH_API_KEY`. Without `name`, a sandbox called
+`medad-<project-dir-name>` is created on first use.
+
+### Tracing (LangSmith)
+
+medad's runtime is LangGraph, so full tracing is just environment variables —
+every turn, tool call, and subagent run lands in LangSmith:
+
+```sh
+export LANGSMITH_TRACING=true
+export LANGSMITH_API_KEY=...
+export LANGSMITH_PROJECT=medad   # optional; defaults to "default"
+```
+
+### Example skills
+
+Copy any directory from [`examples/skills/`](examples/skills/) into
+`~/.medad/skills/` (global) or `.medad/skills/` (project), then run
+`/skills` to list and `/skill:<name> [task]` to invoke.
 
 ## Development
 
@@ -67,5 +124,4 @@ uv run pytest
 
 ## Roadmap
 
-- Phase 4 — MCP servers from config, remote sandbox backends (E2B/LangSmith),
-  LangSmith tracing docs
+- Demo recording for the README

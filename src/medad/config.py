@@ -20,7 +20,17 @@ Schema::
     model = "anthropic:claude-haiku-4-5"   # optional; defaults to the main model
     skills = []                            # optional skill source dirs
 
-Subagent entries from both files are merged by name, project winning.
+    [sandbox]
+    backend = "langsmith"          # "local" (default) or "langsmith"
+    name = "my-sandbox"            # optional; a named sandbox is reused across runs
+
+    [mcp.servers.github]           # each table is a langchain-mcp-adapters connection
+    transport = "stdio"
+    command = "npx"
+    args = ["-y", "@modelcontextprotocol/server-github"]
+
+Subagent entries from both files are merged by name, project winning; MCP
+servers merge the same way.
 """
 
 from __future__ import annotations
@@ -50,6 +60,12 @@ class PermissionsConfig:
     auto_approve_edits: bool = False
 
 
+@dataclass
+class SandboxConfig:
+    backend: str = "local"  # "local" | "langsmith"
+    name: str | None = None  # named sandboxes are reused across runs
+
+
 # Keys copied from a [[subagents]] entry into the SDK's SubAgent spec.
 SUBAGENT_REQUIRED_KEYS = ("name", "description", "system_prompt")
 SUBAGENT_OPTIONAL_KEYS = ("model", "skills")
@@ -61,6 +77,9 @@ class Config:
     model: str = DEFAULT_MODEL
     permissions: PermissionsConfig = field(default_factory=PermissionsConfig)
     subagents: list[dict[str, Any]] = field(default_factory=list)
+    sandbox: SandboxConfig = field(default_factory=SandboxConfig)
+    # name -> langchain-mcp-adapters connection dict, passed through verbatim.
+    mcp_servers: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def state_dir(self) -> Path:
@@ -94,11 +113,19 @@ def load_config(project_dir: Path | None = None) -> Config:
     project_dir = (project_dir or Path.cwd()).resolve()
     merged: dict[str, Any] = {}
     subagents_by_name: dict[str, dict[str, Any]] = {}
+    mcp_servers: dict[str, dict[str, Any]] = {}
+    sandbox_data: dict[str, Any] = {}
     for path in (Path.home() / ".medad" / "config.toml", project_dir / ".medad" / "config.toml"):
         data = _read_toml(path)
         perms = {**merged.get("permissions", {}), **data.get("permissions", {})}
         for spec in _parse_subagents(data.get("subagents", [])):
             subagents_by_name[spec["name"]] = spec
+        servers = data.get("mcp", {}).get("servers", {})
+        if isinstance(servers, dict):
+            mcp_servers.update(
+                {name: conn for name, conn in servers.items() if isinstance(conn, dict)}
+            )
+        sandbox_data.update(data.get("sandbox", {}))
         merged.update(data)
         merged["permissions"] = perms
 
@@ -107,9 +134,15 @@ def load_config(project_dir: Path | None = None) -> Config:
         allow_commands=list(perms_data.get("allow_commands", DEFAULT_ALLOW_COMMANDS)),
         auto_approve_edits=bool(perms_data.get("auto_approve_edits", False)),
     )
+    sandbox = SandboxConfig(
+        backend=str(sandbox_data.get("backend", "local")),
+        name=str(sandbox_data["name"]) if sandbox_data.get("name") else None,
+    )
     return Config(
         project_dir=project_dir,
         model=str(merged.get("model", DEFAULT_MODEL)),
         permissions=permissions,
         subagents=list(subagents_by_name.values()),
+        sandbox=sandbox,
+        mcp_servers=mcp_servers,
     )
