@@ -31,3 +31,31 @@ auto_approve_edits = true
 def test_state_dir(tmp_path: Path):
     cfg = load_config(tmp_path)
     assert cfg.state_dir == tmp_path.resolve() / ".medad"
+
+
+def test_sandbox_defaults(tmp_path: Path):
+    cfg = load_config(tmp_path)
+    assert cfg.sandbox.backend == "local"
+    assert cfg.sandbox.name is None
+    assert cfg.mcp_servers == {}
+
+
+def test_sandbox_and_mcp_config(tmp_path: Path):
+    (tmp_path / ".medad").mkdir()
+    (tmp_path / ".medad" / "config.toml").write_text(
+        """
+[sandbox]
+backend = "langsmith"
+name = "scratch"
+
+[mcp.servers.docs]
+transport = "streamable_http"
+url = "https://example.com/mcp"
+"""
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.sandbox.backend == "langsmith"
+    assert cfg.sandbox.name == "scratch"
+    assert cfg.mcp_servers == {
+        "docs": {"transport": "streamable_http", "url": "https://example.com/mcp"}
+    }

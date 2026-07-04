@@ -64,6 +64,7 @@ def main(
     engine = PermissionEngine(
         allow_commands=cfg.permissions.allow_commands,
         auto_approve_edits=cfg.permissions.auto_approve_edits,
+        project_dir=cfg.project_dir,
     )
     agent = build_agent(cfg, checkpointer, headless=headless)
     ctx = ReplContext(cfg, agent, engine, checkpointer, thread_id)
