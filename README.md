@@ -145,7 +145,3 @@ Copy any directory from [`examples/skills/`](examples/skills/) into
 ```sh
 uv run pytest
 ```
-
-## Roadmap
-
-- Demo recording for the README
