@@ -27,8 +27,9 @@ A Claude-Code-like terminal coding agent built on
 - Headless mode for scripting/CI: `medad -n "..."` or `echo "..." | medad`
 - **MCP servers**: declare `[mcp.servers.<name>]` connections in config; their
   tools are mounted into the agent and gated by the same approval flow
-- **Remote sandboxes**: `[sandbox] backend = "langsmith"` runs shell/file tools
-  in a LangSmith sandbox VM instead of your host
+- **Sandboxes**: `[sandbox] backend = "docker"` runs shell/file tools in a
+  local container (no account needed); `backend = "langsmith"` uses a remote
+  LangSmith sandbox VM instead of your host
 
 ## Install & run
 
@@ -84,20 +85,43 @@ transport = "streamable_http"
 url = "https://example.com/mcp"
 ```
 
-### Remote sandboxes
+### Sandboxes
 
 By default the agent's `execute` and file tools act on your machine. Point
-them at a [LangSmith sandbox](https://docs.langchain.com/langsmith/sandboxes)
-VM instead — this is what makes headless mode safe:
+them at a sandbox instead — this is what makes headless mode safe.
+
+**Docker (local, no account):** commands run in a long-lived local container;
+the only requirement is a working Docker install:
 
 ```toml
 [sandbox]
-backend = "langsmith"   # default: "local"
+backend = "docker"
+image = "python:3.12-slim"   # optional; image needs python3 (see below)
+mount_project = true         # optional; see below
+name = "my-box"              # optional; default: medad-<project-dir-name>
+```
+
+With `mount_project` (the default) the project directory is bind-mounted at
+its host path, so edits land in your working tree while the rest of the host
+stays out of reach. Set it to `false` for full isolation — the agent then
+works in `/workspace` inside the container. The container is reused across
+runs; `docker rm -f <name>` resets it. Note that mount/image settings apply
+when the container is first created, not to an existing one.
+
+The image needs `python3` on PATH: the SDK derives the file tools
+(`read`/`write`/`edit`/`ls`/`glob`/`grep`) from `execute` using small python3
+snippets. Plain `execute` only needs a POSIX `sh`.
+
+**LangSmith (remote VM):** requires `LANGSMITH_API_KEY`:
+
+```toml
+[sandbox]
+backend = "langsmith"
 name = "my-sandbox"     # optional; a named sandbox is reused across runs
 ```
 
-Requires `LANGSMITH_API_KEY`. Without `name`, a sandbox called
-`medad-<project-dir-name>` is created on first use.
+Without `name`, a sandbox called `medad-<project-dir-name>` is created on
+first use.
 
 ### Tracing (LangSmith)
 

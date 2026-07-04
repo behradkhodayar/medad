@@ -21,8 +21,10 @@ Schema::
     skills = []                            # optional skill source dirs
 
     [sandbox]
-    backend = "langsmith"          # "local" (default) or "langsmith"
+    backend = "docker"             # "local" (default), "docker", or "langsmith"
     name = "my-sandbox"            # optional; a named sandbox is reused across runs
+    image = "python:3.12-slim"     # docker only: container image
+    mount_project = true           # docker only: bind-mount the project dir
 
     [mcp.servers.github]           # each table is a langchain-mcp-adapters connection
     transport = "stdio"
@@ -62,8 +64,10 @@ class PermissionsConfig:
 
 @dataclass
 class SandboxConfig:
-    backend: str = "local"  # "local" | "langsmith"
+    backend: str = "local"  # "local" | "docker" | "langsmith"
     name: str | None = None  # named sandboxes are reused across runs
+    image: str = "python:3.12-slim"  # docker only
+    mount_project: bool = True  # docker only: bind-mount the project dir
 
 
 # Keys copied from a [[subagents]] entry into the SDK's SubAgent spec.
@@ -137,6 +141,8 @@ def load_config(project_dir: Path | None = None) -> Config:
     sandbox = SandboxConfig(
         backend=str(sandbox_data.get("backend", "local")),
         name=str(sandbox_data["name"]) if sandbox_data.get("name") else None,
+        image=str(sandbox_data.get("image", "python:3.12-slim")),
+        mount_project=bool(sandbox_data.get("mount_project", True)),
     )
     return Config(
         project_dir=project_dir,
